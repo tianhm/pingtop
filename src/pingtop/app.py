@@ -97,7 +97,7 @@ class PingTopApp(App[None]):
         for host_id in list(self.session.hosts):
             self._start_ping_task(host_id)
         if self.session.selected_host_id:
-            self.table.select_host(self.session.selected_host_id)
+            self.table.select_host(self.session.selected_host_id, scroll=False)
 
     def on_unmount(self) -> None:
         self._stop_all_ping_tasks()
@@ -229,16 +229,20 @@ class PingTopApp(App[None]):
     def _refresh_host(self, host_id: HostId) -> None:
         if host_id not in self.session.hosts:
             return
+        viewport = (self.table.scroll_x, self.table.scroll_y)
         self.table.upsert_host(self.session.host_snapshot(host_id))
         if self.session.selected_host_id == host_id:
             self._refresh_selected_details()
-        self.table.select_host(self.session.selected_host_id)
+        self.table.select_host(self.session.selected_host_id, scroll=False)
+        self._restore_table_viewport(*viewport)
 
     def _sync_all_rows(self) -> None:
+        viewport = (self.table.scroll_x, self.table.scroll_y)
         self.table.set_column_profile(self._column_profile_for_width(self.size.width))
         self.table.sync_rows(self.session.host_snapshots())
         self.table.set_sort_indicator(self.session.sort_key, self.session.sort_reverse)
-        self.table.select_host(self.session.selected_host_id)
+        self.table.select_host(self.session.selected_host_id, scroll=False)
+        self._restore_table_viewport(*viewport)
         self._refresh_selected_details()
 
     def _refresh_selected_details(self) -> None:
@@ -294,7 +298,7 @@ class PingTopApp(App[None]):
         self._stop_ping_task(host_id)
         self.session.delete_host(host_id)
         self.table.remove_host(host_id)
-        self.table.select_host(self.session.selected_host_id)
+        self.table.select_host(self.session.selected_host_id, scroll=False)
         self._refresh_selected_details()
         self._refresh_status_strip()
 
@@ -345,6 +349,21 @@ class PingTopApp(App[None]):
         self._details_visible = visible
         self.details.set_class(not visible, "hidden-panel")
         return True
+
+    def _restore_table_viewport(self, scroll_x: float, scroll_y: float) -> None:
+        self.table.scroll_to(
+            x=scroll_x,
+            y=scroll_y,
+            immediate=True,
+            force=True,
+        )
+        self.call_after_refresh(
+            self.table.scroll_to,
+            x=scroll_x,
+            y=scroll_y,
+            immediate=True,
+            force=True,
+        )
 
     async def _run_host_loop(self, host_id: HostId) -> None:
         flag = int(host_id[:2], 16)

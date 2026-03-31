@@ -3,9 +3,10 @@ from __future__ import annotations
 from collections import defaultdict
 
 import pytest
+from rich.text import Text
 
 from pingtop.app import PingTopApp
-from pingtop.models import PingResult, SessionConfig
+from pingtop.models import PingResult, SessionConfig, SortKey
 from pingtop.session import PingSession
 from pingtop.widgets.details_panel import DetailsPanel
 from pingtop.widgets.host_table import HostTable
@@ -32,11 +33,16 @@ async def test_app_boots_and_updates_rows() -> None:
     session = PingSession(SessionConfig(interval=0.05, timeout=0.01), ["1.1.1.1"])
     app = PingTopApp(session=session, engine=FakeEngine())
 
-    async with app.run_test() as pilot:
+    async with app.run_test(size=(160, 40)) as pilot:
         await pilot.pause(0.25)
+        table = app.query_one(HostTable)
         row = session.host_snapshot(next(iter(session.hosts)))
         assert row["seq"] >= 1
         assert row["trend"]
+        trend_index = HostTable.COLUMN_PROFILES["wide"].index("trend")
+        trend_cell = table.get_row(str(row["id"]))[trend_index]
+        assert isinstance(trend_cell, Text)
+        assert trend_cell.spans
         await pilot.press("q")
 
 
@@ -141,4 +147,29 @@ async def test_details_panel_defaults_open_on_large_window_and_closed_on_small_w
         await pilot.press("i")
         await pilot.pause(0.05)
         assert not details.has_class("hidden-panel")
+        await pilot.press("q")
+
+
+@pytest.mark.asyncio
+async def test_sync_rows_preserves_scroll_position() -> None:
+    hosts = [f"10.0.0.{index}" for index in range(1, 41)]
+    session = PingSession(SessionConfig(interval=0.05, timeout=0.01), hosts)
+    app = PingTopApp(session=session, engine=FakeEngine())
+
+    async with app.run_test(size=(90, 12)) as pilot:
+        table = app.query_one(HostTable)
+        await pilot.pause(0.1)
+        table.scroll_to(y=8, immediate=True)
+        await pilot.pause(0.05)
+        before = table.scroll_y
+
+        session.set_sort(SortKey.SEQ, reverse=False)
+        total_hosts = len(session.hosts)
+        for index, record in enumerate(session.hosts.values(), start=1):
+            record.stats.seq = total_hosts - index
+        app._sync_all_rows()
+        await pilot.pause(0.05)
+
+        assert before > 0
+        assert table.scroll_y == pytest.approx(before)
         await pilot.press("q")

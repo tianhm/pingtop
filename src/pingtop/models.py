@@ -8,8 +8,8 @@ from typing import Protocol
 
 HostId = str
 MAX_HISTORY = 60
-SPARKLINE_BLOCKS = " .:-=+*#%@"
-TIMEOUT_MARKER = "x"
+TREND_BLOCKS = "▁▂▃▄▅▆▇█"
+TIMEOUT_MARKER = "╳"
 
 
 class HostState(str, Enum):
@@ -192,20 +192,25 @@ def normalize_target(target: str) -> str:
     return target.strip().lower()
 
 
-def build_trend(history: list[float | None]) -> str:
+def trend_cells(history: list[float | None]) -> list[tuple[str, int | None]]:
     if not history:
-        return ""
-    samples = [sample for sample in history if sample is not None]
+        return []
+    visible_history = history[-MAX_HISTORY:]
+    samples = [sample for sample in visible_history if sample is not None]
     if not samples:
-        return TIMEOUT_MARKER * min(len(history), MAX_HISTORY)
+        return [(TIMEOUT_MARKER, None)] * len(visible_history)
     low = min(samples)
     high = max(samples)
     span = max(high - low, 1.0)
-    cells: list[str] = []
-    for sample in history[-MAX_HISTORY:]:
+    cells: list[tuple[str, int | None]] = []
+    for sample in visible_history:
         if sample is None:
-            cells.append(TIMEOUT_MARKER)
+            cells.append((TIMEOUT_MARKER, None))
             continue
-        bucket = int(((sample - low) / span) * (len(SPARKLINE_BLOCKS) - 1))
-        cells.append(SPARKLINE_BLOCKS[bucket])
-    return "".join(cells)
+        bucket = int(((sample - low) / span) * (len(TREND_BLOCKS) - 1))
+        cells.append((TREND_BLOCKS[bucket], bucket))
+    return cells
+
+
+def build_trend(history: list[float | None]) -> str:
+    return "".join(cell for cell, _ in trend_cells(history))

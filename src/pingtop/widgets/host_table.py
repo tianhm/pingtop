@@ -3,12 +3,15 @@ from __future__ import annotations
 from typing import cast
 
 from rich.text import Text
+from textual._two_way_dict import TwoWayDict
 from textual.widgets import DataTable
+from textual.widgets._data_table import RowKey
 
 from pingtop.models import SortKey
+from pingtop.widgets.trend import render_trend
 
 
-class HostTable(DataTable[str]):
+class HostTable(DataTable[object]):
     SORT_ASC = "▲"
     SORT_DESC = "▼"
     COLUMNS: list[tuple[str, str]] = [
@@ -83,20 +86,23 @@ class HostTable(DataTable[str]):
         }
 
     def upsert_host(self, row: dict[str, object]) -> None:
-        row_key = str(row["id"])
+        row_key = RowKey(str(row["id"]))
         values = self._row_values(row)
-        try:
-            self.get_row(row_key)
-        except KeyError:
-            self.add_row(*values, key=row_key)
+        if row_key not in self._row_locations:
+            self.add_row(*values, key=str(row_key.value))
             return
         for key, value in zip(self._active_column_keys, values, strict=True):
             self.update_cell(row_key, key, value, update_width=False)
 
     def sync_rows(self, rows: list[dict[str, object]]) -> None:
-        self.clear(columns=False)
+        desired_keys = [RowKey(str(row["id"])) for row in rows]
+        desired_set = set(desired_keys)
+        for row_key in list(self._data):
+            if row_key not in desired_set:
+                self.remove_row(row_key)
         for row in rows:
-            self.add_row(*self._row_values(row), key=str(row["id"]))
+            self.upsert_host(row)
+        self._reorder_rows(desired_keys)
 
     def remove_host(self, host_id: str) -> None:
         try:
@@ -104,14 +110,14 @@ class HostTable(DataTable[str]):
         except KeyError:
             return
 
-    def select_host(self, host_id: str | None) -> None:
+    def select_host(self, host_id: str | None, *, scroll: bool = True) -> None:
         if not host_id:
             return
         try:
             row_index = self.get_row_index(host_id)
         except KeyError:
             return
-        self.move_cursor(row=row_index, column=0, animate=False)
+        self.move_cursor(row=row_index, column=0, animate=False, scroll=scroll)
 
     def set_column_profile(self, profile: str) -> bool:
         column_keys = self.COLUMN_PROFILES[profile]
@@ -139,9 +145,11 @@ class HostTable(DataTable[str]):
             column.label = Text(self._format_header(base_label, marker))
         self.refresh(layout=True)
 
-    def _row_values(self, row: dict[str, object]) -> list[str]:
+    def _row_values(self, row: dict[str, object]) -> list[object]:
         return [
-            self._format_value(column_key, row.get(column_key))
+            render_trend(cast(list[float | None] | None, row.get("history_ms")))
+            if column_key == "trend"
+            else self._format_value(column_key, row.get(column_key))
             for column_key in self._active_column_keys
         ]
 
@@ -171,3 +179,13 @@ class HostTable(DataTable[str]):
         if column_key == "loss_percent":
             return rendered
         return rendered
+
+    def _reorder_rows(self, desired_keys: list[RowKey]) -> None:
+        current_keys = [row.key for row in self.ordered_rows]
+        if current_keys == desired_keys:
+            return
+        self._row_locations = TwoWayDict(
+            {row_key: index for index, row_key in enumerate(desired_keys)}
+        )
+        self._update_count += 1
+        self.refresh()

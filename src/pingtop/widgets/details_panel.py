@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import cast
 
+from rich.text import Text
 from textual.widgets import Static
+
+from pingtop.widgets.trend import render_trend
 
 
 class DetailsPanel(Static):
@@ -12,7 +15,8 @@ class DetailsPanel(Static):
         if row is None:
             self.update(self.DEFAULT_MESSAGE)
             return
-        self.update(
+        history = cast(list[float | None], row["history_ms"])
+        details = Text(
             "\n".join(
                 [
                     f"Host:     {row['target']}",
@@ -28,10 +32,12 @@ class DetailsPanel(Static):
                     f"Error:    {row['last_error'] or '-'}",
                     "",
                     "Trend",
-                    str(row["trend"] or "-"),
                 ]
             )
+            + "\n"
         )
+        details.append_text(render_trend(history))
+        self.update(details)
 
     @staticmethod
     def _fmt(value: object) -> str:

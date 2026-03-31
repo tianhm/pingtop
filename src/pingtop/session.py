@@ -23,6 +23,13 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _dotted_sort_key(value: str) -> tuple[tuple[int, int | str], ...]:
+    parts = value.strip().split(".")
+    return tuple(
+        (0, int(part)) if part.isdigit() else (1, part.lower()) for part in parts
+    )
+
+
 class PingSession:
     def __init__(self, config: SessionConfig, targets: Iterable[str]) -> None:
         self.config = config
@@ -201,7 +208,9 @@ class PingSession:
 
     def _sort_value(self, row: dict[str, object]) -> tuple[bool, object]:
         value = row.get(self.sort_key.value)
-        if self.sort_key == SortKey.STATE and value is not None:
+        if self.sort_key in {SortKey.HOST, SortKey.IP} and value is not None:
+            value = _dotted_sort_key(str(value))
+        elif self.sort_key == SortKey.STATE and value is not None:
             value = str(value)
         return value is None, value
 
