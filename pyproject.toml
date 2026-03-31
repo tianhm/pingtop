@@ -1,0 +1,66 @@
+[build-system]
+requires = ["poetry-core>=2.1.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[project]
+name = "pingtop"
+version = "0.5.0"
+description = "Modern multi-host ping monitor with a Textual TUI."
+readme = "README.rst"
+requires-python = ">=3.10,<4.0"
+license = { text = "MIT" }
+authors = [{ name = "laixintao" }]
+keywords = ["ping", "icmp", "textual", "tui", "network"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Framework :: Textual",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: System :: Networking",
+  "Topic :: Terminals",
+]
+dependencies = [
+  "click>=8.1,<9",
+  "textual>=8.2,<9",
+]
+
+[project.scripts]
+pingtop = "pingtop.cli:main"
+
+[tool.poetry]
+packages = [{ include = "pingtop", from = "src" }]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.5"
+pytest-asyncio = "^1.0.0"
+pytest-cov = "^6.1.1"
+ruff = "^0.11.5"
+mypy = "^1.15.0"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.10"
+packages = ["pingtop"]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+strict_optional = true
+no_implicit_optional = true
+
