@@ -127,7 +127,7 @@ def main(
     snapshot = session.snapshot()
     exit_code = 0
     if summary:
-        click.echo(render_summary(snapshot))
+        click.echo(render_summary(snapshot, color=True), color=True)
     if export_path and resolved_export_format:
         try:
             export_snapshot(snapshot, export_path, resolved_export_format)
