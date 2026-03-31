@@ -1,17 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-import time
 from collections import deque
 from dataclasses import dataclass
 from typing import cast
 
-from textual import events, on, work
+from textual import events, on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.message import Message
 from textual.widgets import Footer, Header, Static
-from textual.worker import Worker, get_current_worker
 
 from pingtop.models import HostId, PingEngine, PingResult, SortKey
 from pingtop.screens.host_form import ConfirmScreen, HelpScreen, HostFormScreen
@@ -72,7 +71,7 @@ class PingTopApp(App[None]):
         super().__init__()
         self.session = session
         self.engine = engine
-        self._ping_workers: dict[HostId, Worker[None]] = {}
+        self._ping_tasks: dict[HostId, asyncio.Task[None]] = {}
         self._pending_updates: deque[PendingUpdate] = deque()
         self._last_sort_refresh = 0.0
         self._details_visible = False
@@ -96,12 +95,12 @@ class PingTopApp(App[None]):
         self._refresh_status_strip()
         self.set_interval(0.25, self.flush_updates)
         for host_id in list(self.session.hosts):
-            self._start_worker(host_id)
+            self._start_ping_task(host_id)
         if self.session.selected_host_id:
             self.table.select_host(self.session.selected_host_id)
 
     def on_unmount(self) -> None:
-        self._stop_all_workers()
+        self._stop_all_ping_tasks()
 
     def on_resize(self, event: events.Resize) -> None:
         if not hasattr(self, "table"):
@@ -140,7 +139,7 @@ class PingTopApp(App[None]):
         self._refresh_status_strip()
 
     def action_quit_session(self) -> None:
-        self._stop_all_workers()
+        self._stop_all_ping_tasks()
         self.exit()
 
     def action_add_host(self) -> None:
@@ -220,8 +219,9 @@ class PingTopApp(App[None]):
             touched.add(pending.host_id)
         for host_id in touched:
             self._refresh_host(host_id)
-        if touched and (time.monotonic() - self._last_sort_refresh) >= 1.0:
-            self._last_sort_refresh = time.monotonic()
+        now = asyncio.get_running_loop().time()
+        if touched and (now - self._last_sort_refresh) >= 1.0:
+            self._last_sort_refresh = now
             self._sync_all_rows()
         self._refresh_status_strip()
         self._refresh_selected_details()
@@ -273,7 +273,7 @@ class PingTopApp(App[None]):
         except ValueError as exc:
             self.notify(str(exc), severity="error")
             return
-        self._start_worker(host_id)
+        self._start_ping_task(host_id)
         self._sync_all_rows()
 
     def _handle_edit_host(self, host_id: HostId, target: str | None) -> None:
@@ -284,37 +284,37 @@ class PingTopApp(App[None]):
         except ValueError as exc:
             self.notify(str(exc), severity="error")
             return
-        self._restart_worker(host_id)
+        self._restart_ping_task(host_id)
         self._refresh_host(host_id)
         self._refresh_status_strip()
 
     def _handle_delete_host(self, host_id: HostId, confirmed: bool | None) -> None:
         if not confirmed:
             return
-        self._stop_worker(host_id)
+        self._stop_ping_task(host_id)
         self.session.delete_host(host_id)
         self.table.remove_host(host_id)
         self.table.select_host(self.session.selected_host_id)
         self._refresh_selected_details()
         self._refresh_status_strip()
 
-    def _start_worker(self, host_id: HostId) -> None:
-        if host_id in self._ping_workers:
+    def _start_ping_task(self, host_id: HostId) -> None:
+        if host_id in self._ping_tasks:
             return
-        self._ping_workers[host_id] = self._run_host_loop(host_id)
+        self._ping_tasks[host_id] = asyncio.create_task(self._run_host_loop(host_id))
 
-    def _restart_worker(self, host_id: HostId) -> None:
-        self._stop_worker(host_id)
-        self._start_worker(host_id)
+    def _restart_ping_task(self, host_id: HostId) -> None:
+        self._stop_ping_task(host_id)
+        self._start_ping_task(host_id)
 
-    def _stop_worker(self, host_id: HostId) -> None:
-        worker = self._ping_workers.pop(host_id, None)
-        if worker is not None:
-            worker.cancel()
+    def _stop_ping_task(self, host_id: HostId) -> None:
+        task = self._ping_tasks.pop(host_id, None)
+        if task is not None:
+            task.cancel()
 
-    def _stop_all_workers(self) -> None:
-        for host_id in list(self._ping_workers):
-            self._stop_worker(host_id)
+    def _stop_all_ping_tasks(self) -> None:
+        for host_id in list(self._ping_tasks):
+            self._stop_ping_task(host_id)
 
     def _apply_responsive_layout(self, force: bool = False) -> bool:
         changed = False
@@ -346,32 +346,24 @@ class PingTopApp(App[None]):
         self.details.set_class(not visible, "hidden-panel")
         return True
 
-    @work(thread=True, group="ping-hosts", exclusive=False, exit_on_error=False)
-    def _run_host_loop(self, host_id: HostId) -> None:
-        worker = get_current_worker()
+    async def _run_host_loop(self, host_id: HostId) -> None:
         flag = int(host_id[:2], 16)
-        while not worker.is_cancelled:
-            record = self.session.hosts.get(host_id)
-            if record is None:
-                return
-            if record.paused:
-                time.sleep(0.1)
-                continue
-            target = record.config.target
-            result = self.engine.ping_once(
-                target=target,
-                timeout=self.session.config.timeout,
-                packet_size=self.session.config.packet_size,
-                flag=flag,
-            )
-            self.post_message(PingSample(host_id, result))
-            self._sleep_with_cancel(self.session.config.interval, worker)
-
-    @staticmethod
-    def _sleep_with_cancel(interval: float, worker: Worker[None]) -> None:
-        end_at = time.monotonic() + interval
-        while not worker.is_cancelled:
-            remaining = end_at - time.monotonic()
-            if remaining <= 0:
-                return
-            time.sleep(min(0.1, remaining))
+        try:
+            while True:
+                record = self.session.hosts.get(host_id)
+                if record is None:
+                    return
+                if record.paused:
+                    await asyncio.sleep(0.1)
+                    continue
+                target = record.config.target
+                result = await self.engine.ping_once(
+                    target=target,
+                    timeout=self.session.config.timeout,
+                    packet_size=self.session.config.packet_size,
+                    flag=flag,
+                )
+                self.post_message(PingSample(host_id, result))
+                await asyncio.sleep(self.session.config.interval)
+        except asyncio.CancelledError:
+            raise

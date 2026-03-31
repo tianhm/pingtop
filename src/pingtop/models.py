@@ -68,7 +68,9 @@ class PingResult:
 
 
 class PingEngine(Protocol):
-    def ping_once(self, target: str, timeout: float, packet_size: int, flag: int) -> PingResult:
+    async def ping_once(
+        self, target: str, timeout: float, packet_size: int, flag: int
+    ) -> PingResult:
         ...
 
 

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import ipaddress
 import os
-import select
 import socket
 import struct
 import time
@@ -26,16 +27,19 @@ def checksum(source_bytes: bytes) -> int:
     return answer >> 8 | ((answer << 8) & 0xFF00)
 
 
-def receive_one_ping(sock: socket.socket, packet_id: int, timeout: float) -> float | None:
-    time_left = timeout
+async def receive_one_ping(
+    loop: asyncio.AbstractEventLoop, sock: socket.socket, packet_id: int, timeout: float
+) -> float | None:
+    deadline = loop.time() + timeout
     while True:
-        started_select = time.time()
-        ready = select.select([sock], [], [], time_left)
-        how_long = time.time() - started_select
-        if ready[0] == []:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            return None
+        try:
+            received_packet = await asyncio.wait_for(loop.sock_recv(sock, 1024), remaining)
+        except TimeoutError:
             return None
         time_received = time.time()
-        received_packet, _ = sock.recvfrom(1024)
         icmp_header = received_packet[20:28]
         _type, _code, _checksum, this_packet_id, _sequence = struct.unpack(
             "bbHHh", icmp_header
@@ -44,13 +48,15 @@ def receive_one_ping(sock: socket.socket, packet_id: int, timeout: float) -> flo
             bytes_size = struct.calcsize("d")
             time_sent = struct.unpack("d", received_packet[28 : 28 + bytes_size])[0]
             return time_received - time_sent
-        time_left -= how_long
-        if time_left <= 0:
-            return None
 
 
-def send_one_ping(sock: socket.socket, dest_addr: str, packet_id: int, packet_size: int) -> None:
-    resolved_ip = socket.gethostbyname(dest_addr)
+async def send_one_ping(
+    loop: asyncio.AbstractEventLoop,
+    sock: socket.socket,
+    resolved_ip: str,
+    packet_id: int,
+    packet_size: int,
+) -> None:
     my_checksum = 0
     header = struct.pack("bbHHh", ICMP_ECHO_REQUEST, 0, my_checksum, packet_id, 1)
     bytes_size = struct.calcsize("d")
@@ -58,13 +64,17 @@ def send_one_ping(sock: socket.socket, dest_addr: str, packet_id: int, packet_si
     data = struct.pack("d", time.time()) + data
     my_checksum = checksum(header + data)
     header = struct.pack("bbHHh", ICMP_ECHO_REQUEST, 0, socket.htons(my_checksum), packet_id, 1)
-    sock.sendto(header + data, (resolved_ip, 1))
+    sock.connect((resolved_ip, 1))
+    await loop.sock_sendall(sock, header + data)
 
 
 class RawIcmpEngine:
-    def ping_once(self, target: str, timeout: float, packet_size: int, flag: int) -> PingResult:
+    async def ping_once(
+        self, target: str, timeout: float, packet_size: int, flag: int
+    ) -> PingResult:
+        loop = asyncio.get_running_loop()
         try:
-            resolved_ip = socket.gethostbyname(target)
+            resolved_ip = await self._resolve_target(loop, target)
         except socket.gaierror as exc:
             return PingResult(success=False, error_message=str(exc))
 
@@ -77,10 +87,11 @@ class RawIcmpEngine:
         except OSError as exc:
             return PingResult(success=False, resolved_ip=resolved_ip, error_message=str(exc))
 
+        sock.setblocking(False)
         packet_id = (os.getpid() & 0xFF00) | (flag & 0x00FF)
         try:
-            send_one_ping(sock, target, packet_id, packet_size)
-            delay = receive_one_ping(sock, packet_id, timeout)
+            await send_one_ping(loop, sock, resolved_ip, packet_id, packet_size)
+            delay = await receive_one_ping(loop, sock, packet_id, timeout)
         except OSError as exc:
             return PingResult(success=False, resolved_ip=resolved_ip, error_message=str(exc))
         finally:
@@ -89,3 +100,19 @@ class RawIcmpEngine:
             return PingResult(success=False, resolved_ip=resolved_ip)
         return PingResult(success=True, rtt_ms=delay * 1000, resolved_ip=resolved_ip)
 
+    async def _resolve_target(
+        self, loop: asyncio.AbstractEventLoop, target: str
+    ) -> str:
+        try:
+            return str(ipaddress.ip_address(target))
+        except ValueError:
+            pass
+        infos = await loop.getaddrinfo(
+            target,
+            None,
+            family=socket.AF_INET,
+            type=socket.SOCK_DGRAM,
+        )
+        if not infos:
+            raise socket.gaierror(f"Unable to resolve {target}")
+        return str(infos[0][4][0])

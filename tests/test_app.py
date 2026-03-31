@@ -15,7 +15,9 @@ class FakeEngine:
     def __init__(self) -> None:
         self._counts = defaultdict(int)
 
-    def ping_once(self, target: str, timeout: float, packet_size: int, flag: int) -> PingResult:
+    async def ping_once(
+        self, target: str, timeout: float, packet_size: int, flag: int
+    ) -> PingResult:
         self._counts[target] += 1
         count = self._counts[target]
         if target == "bad-host":
