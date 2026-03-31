@@ -1,0 +1,50 @@
+Screen {
+    layout: vertical;
+}
+
+#host-table {
+    height: 1fr;
+    min-height: 8;
+}
+
+#details-panel {
+    height: 13;
+    border: round $accent;
+    padding: 1 2;
+    margin-top: 1;
+}
+
+#details-panel.hidden-panel {
+    display: none;
+}
+
+#status-strip {
+    height: 3;
+    padding: 0 1;
+    border-top: solid $panel;
+    content-align: left middle;
+}
+
+#dialog {
+    width: 60;
+    height: auto;
+    padding: 1 2;
+    border: round $primary;
+    background: $surface;
+}
+
+.dialog-title {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+.dialog-actions {
+    margin-top: 1;
+    align: right middle;
+    height: auto;
+}
+
+#dialog-error {
+    color: $error;
+    height: 1;
+}
