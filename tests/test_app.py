@@ -162,11 +162,12 @@ async def test_details_panel_defaults_open_on_large_window_and_closed_on_small_w
         assert details.has_class("hidden-panel")
         assert len(table.ordered_columns) == len(HostTable.COLUMN_PROFILES["narrow"])
         await pilot.press("i")
-        await pilot.pause(0.05)
+        await pilot.pause(0.15)
         assert not details.has_class("hidden-panel")
         details_render = details.render()
-        assert "Trend Graph" in details_render.plain
+        assert "RTT Graph" in details_render.plain
         assert "oldest -> newest" in details_render.plain
+        assert "Host:" in details_render.plain
         await pilot.press("q")
 
 
