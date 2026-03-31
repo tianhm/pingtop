@@ -7,7 +7,7 @@ Features
 --------
 
 - Monitor multiple hosts concurrently in a live Textual table
-- Keep BSD-style ping summary output on exit
+- Print a short colored summary on exit
 - Add, edit, delete, pause, and reset hosts during a session
 - Export final statistics as JSON or CSV
 - Keep a raw ICMP engine instead of shelling out to the system ``ping`` command
@@ -58,7 +58,7 @@ Options include:
 - ``-t, --timeout`` timeout in seconds
 - ``-s, --packet-size`` ICMP payload size in bytes
 - ``--hosts-file`` newline-delimited host list
-- ``--summary / --no-summary`` print BSD-style summary on exit
+- ``--summary / --no-summary`` print a short colored summary on exit
 - ``--export`` output path
 - ``--export-format [json|csv]`` export format override
 - ``--log-file`` log destination
