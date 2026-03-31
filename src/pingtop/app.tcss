@@ -2,20 +2,20 @@ Screen {
     layout: vertical;
 }
 
-#main-pane {
-    height: 1fr;
-    layout: horizontal;
-}
-
 #host-table {
-    width: 3fr;
-    min-width: 60;
+    height: 1fr;
+    min-height: 8;
 }
 
 #details-panel {
-    width: 2fr;
+    height: 13;
     border: round $accent;
     padding: 1 2;
+    margin-top: 1;
+}
+
+#details-panel.hidden-panel {
+    display: none;
 }
 
 #status-strip {
@@ -48,4 +48,3 @@ Screen {
     color: $error;
     height: 1;
 }
-

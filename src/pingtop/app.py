@@ -6,15 +6,14 @@ from collections import deque
 from dataclasses import dataclass
 from typing import cast
 
-from textual import on, work
+from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal
 from textual.message import Message
 from textual.widgets import Footer, Header, Static
 from textual.worker import Worker, get_current_worker
 
-from pingtop.models import HostId, PingEngine, PingResult
+from pingtop.models import HostId, PingEngine, PingResult, SortKey
 from pingtop.screens.host_form import ConfirmScreen, HelpScreen, HostFormScreen
 from pingtop.session import PingSession
 from pingtop.widgets.details_panel import DetailsPanel
@@ -38,19 +37,34 @@ class PingSample(Message):
 
 class PingTopApp(App[None]):
     CSS_PATH = "app.tcss"
+    DETAILS_AUTO_OPEN_WIDTH = 130
+    DETAILS_AUTO_OPEN_HEIGHT = 28
+    SORT_HOTKEYS = {
+        "H": "target",
+        "G": "resolved_ip",
+        "S": "seq",
+        "R": "last_rtt_ms",
+        "I": "min_rtt_ms",
+        "A": "avg_rtt_ms",
+        "M": "max_rtt_ms",
+        "T": "stddev_ms",
+        "L": "lost",
+        "P": "loss_percent",
+        "U": "state",
+        "W": "trend",
+    }
     BINDINGS = [
         Binding("q", "quit_session", "Quit"),
         Binding("a", "add_host", "Add"),
         Binding("e", "edit_selected", "Edit"),
         Binding("d", "delete_selected", "Delete"),
+        Binding("i", "toggle_details", "Details"),
         Binding("space", "toggle_selected_pause", "Pause"),
         Binding("p", "toggle_all_pause", "Pause All"),
         Binding("r", "reset_selected", "Reset"),
-        Binding("shift+r", "reset_all", "Reset All"),
-        Binding("s", "cycle_sort", "Sort"),
-        Binding("shift+s", "toggle_sort_order", "Reverse"),
-        Binding("enter", "focus_details", "Details"),
+        Binding("ctrl+r", "reset_all", "Reset All"),
         Binding("tab", "focus_next"),
+        Binding("h", "show_help", "Help"),
         Binding("?", "show_help", "Help", show=False),
     ]
 
@@ -61,12 +75,14 @@ class PingTopApp(App[None]):
         self._ping_workers: dict[HostId, Worker[None]] = {}
         self._pending_updates: deque[PendingUpdate] = deque()
         self._last_sort_refresh = 0.0
+        self._details_visible = False
+        self._details_manually_toggled = False
+        self._current_column_profile = "wide"
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        with Horizontal(id="main-pane"):
-            yield HostTable(id="host-table")
-            yield DetailsPanel(id="details-panel")
+        yield HostTable(id="host-table")
+        yield DetailsPanel(id="details-panel", classes="hidden-panel")
         yield Static("", id="status-strip")
         yield Footer()
 
@@ -74,6 +90,7 @@ class PingTopApp(App[None]):
         self.table = self.query_one(HostTable)
         self.details = self.query_one(DetailsPanel)
         self.status_strip = self.query_one("#status-strip", Static)
+        self._apply_responsive_layout(force=True)
         self._sync_all_rows()
         self._refresh_selected_details()
         self._refresh_status_strip()
@@ -86,6 +103,21 @@ class PingTopApp(App[None]):
     def on_unmount(self) -> None:
         self._stop_all_workers()
 
+    def on_resize(self, event: events.Resize) -> None:
+        if not hasattr(self, "table"):
+            return
+        if self._apply_responsive_layout():
+            self._sync_all_rows()
+            self._refresh_status_strip()
+
+    def on_key(self, event: events.Key) -> None:
+        character = event.character
+        if character is None:
+            return
+        if character in self.SORT_HOTKEYS:
+            self.action_sort_by(self.SORT_HOTKEYS[character])
+            event.stop()
+
     @on(HostTable.RowHighlighted)
     def on_row_highlighted(self, event: HostTable.RowHighlighted) -> None:
         row_key = event.row_key.value if event.row_key else None
@@ -93,16 +125,19 @@ class PingTopApp(App[None]):
         self._refresh_selected_details()
 
     def action_focus_next(self) -> None:
-        if self.focused is self.table:
+        if self._details_visible and self.focused is self.table:
             self.details.focus()
         else:
             self.table.focus()
 
-    def action_focus_details(self) -> None:
-        self.details.focus()
-
     def action_show_help(self) -> None:
         self.push_screen(HelpScreen())
+
+    def action_toggle_details(self) -> None:
+        self._details_manually_toggled = True
+        self._set_details_visible(not self._details_visible)
+        self._sync_all_rows()
+        self._refresh_status_strip()
 
     def action_quit_session(self) -> None:
         self._stop_all_workers()
@@ -160,14 +195,14 @@ class PingTopApp(App[None]):
         self._refresh_selected_details()
         self._refresh_status_strip()
 
-    def action_cycle_sort(self) -> None:
-        self.session.cycle_sort()
+    def action_sort_by(self, column_key: str) -> None:
+        sort_key = SortKey(column_key)
+        if self.session.sort_key == sort_key:
+            self.session.toggle_sort_order()
+        else:
+            self.session.set_sort(sort_key, reverse=False)
         self._sync_all_rows()
         self._refresh_status_strip()
-
-    def action_toggle_sort_order(self) -> None:
-        self.session.toggle_sort_order()
-        self._sync_all_rows()
 
     @on(PingSample)
     def on_ping_sample(self, message: PingSample) -> None:
@@ -200,13 +235,16 @@ class PingTopApp(App[None]):
         self.table.select_host(self.session.selected_host_id)
 
     def _sync_all_rows(self) -> None:
+        self.table.set_column_profile(self._column_profile_for_width(self.size.width))
         self.table.sync_rows(self.session.host_snapshots())
+        self.table.set_sort_indicator(self.session.sort_key, self.session.sort_reverse)
         self.table.select_host(self.session.selected_host_id)
         self._refresh_selected_details()
 
     def _refresh_selected_details(self) -> None:
         record = self.session.current_host()
-        self.details.show_host(record.snapshot() if record else None)
+        if self._details_visible:
+            self.details.show_host(record.snapshot() if record else None)
 
     def _refresh_status_strip(self) -> None:
         aggregates = self.session.aggregates()
@@ -222,6 +260,7 @@ class PingTopApp(App[None]):
                     f"Loss {float(cast(float, aggregates['loss_percent'])):.1f}%",
                     f"Sort {self.session.sort_key.value}",
                     "DESC" if self.session.sort_reverse else "ASC",
+                    f"Details {'ON' if self._details_visible else 'OFF'}",
                 ]
             )
         )
@@ -276,6 +315,36 @@ class PingTopApp(App[None]):
     def _stop_all_workers(self) -> None:
         for host_id in list(self._ping_workers):
             self._stop_worker(host_id)
+
+    def _apply_responsive_layout(self, force: bool = False) -> bool:
+        changed = False
+        if force or not self._details_manually_toggled:
+            changed = self._set_details_visible(self._should_auto_show_details()) or changed
+        profile = self._column_profile_for_width(self.size.width)
+        if force or profile != self._current_column_profile:
+            self._current_column_profile = profile
+            changed = True
+        return changed
+
+    def _should_auto_show_details(self) -> bool:
+        return (
+            self.size.width >= self.DETAILS_AUTO_OPEN_WIDTH
+            and self.size.height >= self.DETAILS_AUTO_OPEN_HEIGHT
+        )
+
+    def _column_profile_for_width(self, width: int) -> str:
+        if width >= 150:
+            return "wide"
+        if width >= 105:
+            return "medium"
+        return "narrow"
+
+    def _set_details_visible(self, visible: bool) -> bool:
+        if self._details_visible == visible:
+            return False
+        self._details_visible = visible
+        self.details.set_class(not visible, "hidden-panel")
+        return True
 
     @work(thread=True, group="ping-hosts", exclusive=False, exit_on_error=False)
     def _run_host_loop(self, host_id: HostId) -> None:

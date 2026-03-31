@@ -7,6 +7,7 @@ import pytest
 from pingtop.app import PingTopApp
 from pingtop.models import PingResult, SessionConfig
 from pingtop.session import PingSession
+from pingtop.widgets.details_panel import DetailsPanel
 from pingtop.widgets.host_table import HostTable
 
 
@@ -74,13 +75,68 @@ async def test_app_sort_and_help_screen() -> None:
 
     async with app.run_test() as pilot:
         await pilot.pause(0.15)
-        app.action_cycle_sort()
-        app.action_toggle_sort_order()
+        await pilot.press("S")
+        await pilot.pause(0.05)
+        assert session.sort_key.value == "seq"
+        assert session.sort_reverse is False
+        await pilot.press("S")
+        await pilot.pause(0.05)
         assert session.sort_reverse is True
-        app.action_show_help()
+        await pilot.press("h")
         await pilot.pause(0.05)
         assert app.screen_stack
+        await pilot.press("h")
+        await pilot.pause(0.05)
         table = app.query_one(HostTable)
         assert table.row_count == len(session.hosts)
         await pilot.press("q")
 
+
+@pytest.mark.asyncio
+async def test_table_keeps_numeric_width_and_shows_sort_indicator() -> None:
+    session = PingSession(SessionConfig(interval=0.05, timeout=0.01), ["1.1.1.1"])
+    app = PingTopApp(session=session, engine=FakeEngine())
+
+    async with app.run_test(size=(160, 40)) as pilot:
+        table = app.query_one(HostTable)
+        session.set_sort(session.sort_key, reverse=False)
+        app._sync_all_rows()
+
+        row = session.host_snapshot(next(iter(session.hosts)))
+        row["seq"] = 318
+        table.upsert_host(row)
+        wide_value = table.get_row(str(row["id"]))[2]
+
+        row["seq"] = 99
+        table.upsert_host(row)
+        narrow_value = table.get_row(str(row["id"]))[2]
+
+        host_header = str(table.ordered_columns[0].label)
+        assert host_header.endswith("▲")
+        assert len(str(wide_value)) == len(str(narrow_value))
+        assert str(narrow_value).strip() == "99"
+        await pilot.press("q")
+
+
+@pytest.mark.asyncio
+async def test_details_panel_defaults_open_on_large_window_and_closed_on_small_window() -> None:
+    large_session = PingSession(SessionConfig(interval=0.05, timeout=0.01), ["1.1.1.1"])
+    large_app = PingTopApp(session=large_session, engine=FakeEngine())
+    async with large_app.run_test(size=(160, 40)) as pilot:
+        details = large_app.query_one(DetailsPanel)
+        table = large_app.query_one(HostTable)
+        assert not details.has_class("hidden-panel")
+        assert len(table.ordered_columns) == len(HostTable.COLUMN_PROFILES["wide"])
+        await pilot.press("q")
+
+    small_session = PingSession(SessionConfig(interval=0.05, timeout=0.01), ["1.1.1.1"])
+    small_app = PingTopApp(session=small_session, engine=FakeEngine())
+    async with small_app.run_test(size=(90, 24)) as pilot:
+        details = small_app.query_one(DetailsPanel)
+        table = small_app.query_one(HostTable)
+        assert details.has_class("hidden-panel")
+        assert len(table.ordered_columns) == len(HostTable.COLUMN_PROFILES["narrow"])
+        await pilot.press("i")
+        await pilot.pause(0.05)
+        assert not details.has_class("hidden-panel")
+        await pilot.press("q")

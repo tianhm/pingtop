@@ -58,19 +58,35 @@ class ConfirmScreen(ModalScreen[bool]):
 
 
 class HelpScreen(ModalScreen[None]):
+    BINDINGS = [
+        ("escape", "dismiss_screen", "Close"),
+        ("q", "dismiss_screen", "Close"),
+        ("h", "dismiss_screen", "Close"),
+    ]
     HELP_TEXT = "\n".join(
         [
             "a   add host",
             "e   edit selected host",
             "d   delete selected host",
+            "i   show or hide details",
+            "h   open or close help",
             "space   pause/resume selected host",
             "p   pause/resume all hosts",
             "r   reset selected host statistics",
-            "R   reset all host statistics",
-            "s   cycle sort key",
-            "S   toggle sort order",
-            "enter   focus details",
-            "tab   switch focus",
+            "ctrl+r   reset all host statistics",
+            "H   sort by Host",
+            "G   sort by IP",
+            "S   sort by Seq",
+            "R   sort by RTT",
+            "I   sort by Min",
+            "A   sort by Avg",
+            "M   sort by Max",
+            "T   sort by StdDev",
+            "L   sort by Loss",
+            "P   sort by Loss%",
+            "U   sort by State",
+            "W   sort by Trend",
+            "press the same sort key again to reverse order",
             "q   quit",
         ]
     )
@@ -83,4 +99,7 @@ class HelpScreen(ModalScreen[None]):
 
     @on(Button.Pressed, "#close")
     def on_close(self) -> None:
+        self.dismiss(None)
+
+    def action_dismiss_screen(self) -> None:
         self.dismiss(None)
