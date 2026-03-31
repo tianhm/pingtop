@@ -19,6 +19,7 @@ TREND_STYLES = (
 )
 TIMEOUT_STYLE = "bold #ef4444"
 DETAIL_GRAPH_EMPTY_STYLE = "#4b5563"
+DETAIL_GRAPH_AXIS_STYLE = "#9ca3af"
 
 
 def render_trend(history: Sequence[float | None] | None, *, width: int | None = None) -> Text:
@@ -73,3 +74,69 @@ def render_trend_graph(
             else:
                 graph.append("·", style=DETAIL_GRAPH_EMPTY_STYLE)
     return graph
+
+
+def render_detailed_trend_graph(
+    history: Sequence[float | None] | None,
+    *,
+    width: int | None = None,
+    height: int = 6,
+) -> list[Text]:
+    header = Text("RTT Graph", style="bold")
+    if not history:
+        return [header, Text("waiting for samples", style=DETAIL_GRAPH_EMPTY_STYLE)]
+
+    cells = list(history)
+    if width is not None and width > 0:
+        cells = cells[-width:]
+    if not cells:
+        return [header, Text("waiting for samples", style=DETAIL_GRAPH_EMPTY_STYLE)]
+
+    samples = [sample for sample in cells if sample is not None]
+    if not samples:
+        timeout_line = Text("timeouts │ ", style=DETAIL_GRAPH_AXIS_STYLE)
+        timeout_line.append(TIMEOUT_MARKER * len(cells), style=TIMEOUT_STYLE)
+        return [
+            header,
+            timeout_line,
+            _render_graph_axis(len(cells), len("timeouts")),
+            Text(" " * (len("timeouts") + 3) + "oldest -> newest", style=DETAIL_GRAPH_AXIS_STYLE),
+        ]
+
+    low = min(samples)
+    high = max(samples)
+    avg = sum(samples) / len(samples)
+    span = max(high - low, 1.0)
+    label_width = max(len(f"{low:.1f}"), len(f"{high:.1f}"))
+    header.append(f"  {low:.1f}..{high:.1f} ms", style=DETAIL_GRAPH_AXIS_STYLE)
+    header.append(f"  avg {avg:.1f}", style=DETAIL_GRAPH_AXIS_STYLE)
+
+    lines = [header]
+    for level in range(height, 0, -1):
+        scale_value = low + (span * (level - 1) / max(height - 1, 1))
+        line = Text(f"{scale_value:>{label_width}.1f} │ ", style=DETAIL_GRAPH_AXIS_STYLE)
+        for sample in cells:
+            if sample is None:
+                line.append(TIMEOUT_MARKER, style=TIMEOUT_STYLE)
+                continue
+            sample_height = 1 + round(((sample - low) / span) * (height - 1))
+            bucket = min(
+                len(TREND_STYLES) - 1,
+                int(((sample - low) / span) * (len(TREND_STYLES) - 1)),
+            )
+            if sample_height >= level:
+                line.append("█", style=TREND_STYLES[bucket])
+            else:
+                line.append("·", style=DETAIL_GRAPH_EMPTY_STYLE)
+        lines.append(line)
+
+    lines.append(_render_graph_axis(len(cells), label_width))
+    lines.append(Text(" " * (label_width + 3) + "oldest -> newest", style=DETAIL_GRAPH_AXIS_STYLE))
+    return lines
+
+
+def _render_graph_axis(width: int, label_width: int) -> Text:
+    axis = Text(" " * label_width, style=DETAIL_GRAPH_AXIS_STYLE)
+    axis.append(" └", style=DETAIL_GRAPH_AXIS_STYLE)
+    axis.append("─" * width, style=DETAIL_GRAPH_AXIS_STYLE)
+    return axis

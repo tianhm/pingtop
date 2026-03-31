@@ -4,9 +4,11 @@ from rich.text import Text
 
 from pingtop.models import TIMEOUT_MARKER, TREND_BLOCKS, build_trend
 from pingtop.widgets.trend import (
+    DETAIL_GRAPH_AXIS_STYLE,
     DETAIL_GRAPH_EMPTY_STYLE,
     TIMEOUT_STYLE,
     TREND_STYLES,
+    render_detailed_trend_graph,
     render_trend,
     render_trend_graph,
     render_trend_legend,
@@ -63,3 +65,17 @@ def test_render_trend_graph_builds_multiline_chart() -> None:
     assert TIMEOUT_MARKER in graph.plain
     assert any(span.style == TIMEOUT_STYLE for span in graph.spans)
     assert any(span.style == DETAIL_GRAPH_EMPTY_STYLE for span in graph.spans)
+
+
+def test_render_detailed_trend_graph_includes_scale_and_axis() -> None:
+    graph_lines = render_detailed_trend_graph([10.0, 15.0, 30.0, None], width=4, height=4)
+
+    assert graph_lines[0].plain.startswith("RTT Graph")
+    assert any("oldest -> newest" in line.plain for line in graph_lines)
+    assert any(TIMEOUT_MARKER in line.plain for line in graph_lines)
+    assert any("└" in line.plain for line in graph_lines)
+    assert any(
+        span.style == DETAIL_GRAPH_AXIS_STYLE
+        for line in graph_lines
+        for span in line.spans
+    )

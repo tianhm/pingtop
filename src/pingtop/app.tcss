@@ -9,7 +9,7 @@ Screen {
 }
 
 #details-panel {
-    height: 13;
+    height: 15;
     border: round $accent;
     padding: 1 2;
     margin-top: 1;
