@@ -8,16 +8,16 @@ from rich.text import Text
 from pingtop.models import TIMEOUT_MARKER, TREND_BLOCKS, trend_cells
 
 TREND_STYLES = (
-    "#d1fae5 on #14532d",
-    "#bbf7d0 on #166534",
-    "#ecfccb on #3f6212",
-    "#fef3c7 on #92400e",
-    "#fed7aa on #9a3412",
-    "#fecaca on #b91c1c",
-    "#ffffff on #dc2626",
-    "#ffffff on #7f1d1d",
+    "#86efac",
+    "#4ade80",
+    "#a3e635",
+    "#fde047",
+    "#fb923c",
+    "#f87171",
+    "#ef4444",
+    "#dc2626",
 )
-TIMEOUT_STYLE = "bold white on #450a0a"
+TIMEOUT_STYLE = "bold #ef4444"
 DETAIL_GRAPH_EMPTY_STYLE = "#4b5563"
 
 

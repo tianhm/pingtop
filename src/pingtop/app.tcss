@@ -5,6 +5,7 @@ Screen {
 #host-table {
     height: 1fr;
     min-height: 8;
+    scrollbar-gutter: stable;
 }
 
 #details-panel {

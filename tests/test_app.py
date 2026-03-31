@@ -195,6 +195,22 @@ async def test_sync_rows_preserves_scroll_position() -> None:
         await pilot.press("q")
 
 
+@pytest.mark.asyncio
+async def test_table_reserves_space_for_vertical_scrollbar_without_horizontal_scroll() -> None:
+    hosts = [f"10.0.0.{index}" for index in range(1, 260)]
+    session = PingSession(SessionConfig(interval=0.05, timeout=0.01), hosts)
+    app = PingTopApp(session=session, engine=FakeEngine())
+
+    async with app.run_test(size=(160, 12)) as pilot:
+        table = app.query_one(HostTable)
+        await pilot.pause(0.15)
+
+        assert table.max_scroll_y > 0
+        assert table.max_scroll_x == 0
+        assert not table.show_horizontal_scrollbar
+        await pilot.press("q")
+
+
 def test_restore_table_viewport_coalesces_after_refresh_callbacks() -> None:
     session = PingSession(SessionConfig(), ["1.1.1.1"])
     app = PingTopApp(session=session, engine=FakeEngine())
