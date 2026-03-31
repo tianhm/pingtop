@@ -32,6 +32,12 @@ Run
 
    poetry run pingtop 1.1.1.1 8.8.8.8
 
+CIDR notation is also supported and expands to the usable hosts in that subnet:
+
+::
+
+   poetry run pingtop 10.22.76.19/24
+
 You can also load hosts from a file:
 
 ::

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import logging
 from pathlib import Path
 
@@ -38,12 +39,26 @@ def _merge_hosts(hosts: tuple[str, ...], hosts_file: str | None) -> list[str]:
     merged: list[str] = []
     seen: set[str] = set()
     for host in [*hosts, *_read_hosts_file(hosts_file)]:
-        key = host.strip().lower()
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        merged.append(host.strip())
+        for expanded_host in _expand_host(host):
+            key = expanded_host.lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            merged.append(expanded_host)
     return merged
+
+
+def _expand_host(host: str) -> list[str]:
+    clean_host = host.strip()
+    if not clean_host:
+        return []
+    if "/" not in clean_host:
+        return [clean_host]
+    try:
+        network = ipaddress.ip_network(clean_host, strict=False)
+    except ValueError as exc:
+        raise click.ClickException(f"Invalid network or host: {clean_host}") from exc
+    return [str(address) for address in network.hosts()]
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
@@ -120,4 +135,3 @@ def main(
             click.echo(f"Export failed: {exc}", err=True)
             exit_code = 2
     raise SystemExit(exit_code)
-

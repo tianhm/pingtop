@@ -51,6 +51,46 @@ def test_cli_merges_hosts_and_infers_export_format(tmp_path, monkeypatch) -> Non
     assert (tmp_path / "out.json").exists()
 
 
+def test_cli_expands_cidr_targets(tmp_path, monkeypatch) -> None:
+    recorded = {}
+
+    class FakeApp:
+        def __init__(self, session, engine) -> None:
+            recorded["session"] = session
+
+        def run(self) -> None:
+            return None
+
+    monkeypatch.setattr(cli, "PingTopApp", FakeApp)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.main, ["10.22.76.19/30", "--no-summary"])
+
+    assert result.exit_code == 0
+    session = recorded["session"]
+    assert [record.config.target for record in session.hosts.values()] == [
+        "10.22.76.17",
+        "10.22.76.18",
+    ]
+
+
+def test_cli_rejects_invalid_cidr(monkeypatch) -> None:
+    class FakeApp:
+        def __init__(self, session, engine) -> None:
+            self.session = session
+
+        def run(self) -> None:
+            return None
+
+    monkeypatch.setattr(cli, "PingTopApp", FakeApp)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.main, ["10.22.76.19/99"])
+
+    assert result.exit_code != 0
+    assert "Invalid network or host" in result.output
+
+
 def test_cli_requires_explicit_export_format_for_ambiguous_extension(tmp_path, monkeypatch) -> None:
     class FakeApp:
         def __init__(self, session, engine) -> None:
@@ -64,4 +104,3 @@ def test_cli_requires_explicit_export_format_for_ambiguous_extension(tmp_path, m
     result = runner.invoke(cli.main, ["1.1.1.1", "--export", str(tmp_path / "out.data")])
     assert result.exit_code != 0
     assert "Unable to infer export format" in result.output
-
