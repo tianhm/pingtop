@@ -5,7 +5,8 @@ from typing import cast
 from rich.text import Text
 from textual.widgets import Static
 
-from pingtop.widgets.trend import render_trend
+from pingtop.models import TIMEOUT_MARKER
+from pingtop.widgets.trend import render_trend_graph
 
 
 class DetailsPanel(Static):
@@ -16,6 +17,7 @@ class DetailsPanel(Static):
             self.update(self.DEFAULT_MESSAGE)
             return
         history = cast(list[float | None], row["history_ms"])
+        graph_width = self._graph_width()
         details = Text(
             "\n".join(
                 [
@@ -31,12 +33,14 @@ class DetailsPanel(Static):
                     f"Lost:     {row['lost']} ({float(cast(float, row['loss_percent'])):.1f}%)",
                     f"Error:    {row['last_error'] or '-'}",
                     "",
-                    "Trend",
+                    "Trend Graph",
+                    self._trend_scale(history),
+                    "oldest -> newest",
                 ]
             )
             + "\n"
         )
-        details.append_text(render_trend(history))
+        details.append_text(render_trend_graph(history, width=graph_width))
         self.update(details)
 
     @staticmethod
@@ -44,3 +48,15 @@ class DetailsPanel(Static):
         if value is None:
             return "-"
         return f"{float(cast(float, value)):.1f} ms"
+
+    def _graph_width(self) -> int:
+        if self.size.width <= 0:
+            return 32
+        return max(12, min(48, self.size.width - 4))
+
+    @staticmethod
+    def _trend_scale(history: list[float | None]) -> str:
+        samples = [sample for sample in history if sample is not None]
+        if not samples:
+            return "timeouts only"
+        return f"low {min(samples):.1f} ms / high {max(samples):.1f} ms / timeout {TIMEOUT_MARKER}"
