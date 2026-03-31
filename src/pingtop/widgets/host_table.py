@@ -208,7 +208,8 @@ class HostTable(DataTable[object]):
         return max(1, column.width)
 
     def _resize_trend_column(self) -> None:
-        if self.TREND_COLUMN_KEY not in self._active_column_keys or self.size.width <= 0:
+        available_width = self.scrollable_content_region.width
+        if self.TREND_COLUMN_KEY not in self._active_column_keys or available_width <= 0:
             return
         trend_column = self.columns.get(ColumnKey(self.TREND_COLUMN_KEY))
         if trend_column is None:
@@ -220,7 +221,7 @@ class HostTable(DataTable[object]):
         )
         target_width = max(
             len(self._format_header(self._column_labels[self.TREND_COLUMN_KEY], None)),
-            self.size.width - reserved_width - (2 * self.cell_padding),
+            available_width - reserved_width - (2 * self.cell_padding),
         )
         if trend_column.width == target_width and not trend_column.auto_width:
             return
