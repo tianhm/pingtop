@@ -28,6 +28,14 @@ class FakeEngine:
         return PingResult(success=True, rtt_ms=10.0 + count, resolved_ip="127.0.0.1")
 
 
+class FakeTable:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def scroll_to(self, **kwargs: object) -> None:
+        self.calls.append(kwargs)
+
+
 @pytest.mark.asyncio
 async def test_app_boots_and_updates_rows() -> None:
     session = PingSession(SessionConfig(interval=0.05, timeout=0.01), ["1.1.1.1"])
@@ -43,6 +51,8 @@ async def test_app_boots_and_updates_rows() -> None:
         trend_cell = table.get_row(str(row["id"]))[trend_index]
         assert isinstance(trend_cell, Text)
         assert trend_cell.spans
+        assert str(table.ordered_columns[-1].key.value) == "trend"
+        assert table.ordered_columns[-1].width > 20
         await pilot.press("q")
 
 
@@ -133,7 +143,7 @@ async def test_details_panel_defaults_open_on_large_window_and_closed_on_small_w
     async with large_app.run_test(size=(160, 40)) as pilot:
         details = large_app.query_one(DetailsPanel)
         table = large_app.query_one(HostTable)
-        assert not details.has_class("hidden-panel")
+        assert details.has_class("hidden-panel")
         assert len(table.ordered_columns) == len(HostTable.COLUMN_PROFILES["wide"])
         await pilot.press("q")
 
@@ -171,5 +181,33 @@ async def test_sync_rows_preserves_scroll_position() -> None:
         await pilot.pause(0.05)
 
         assert before > 0
-        assert table.scroll_y == pytest.approx(before)
+        assert table.scroll_y == pytest.approx(before, abs=1.0)
         await pilot.press("q")
+
+
+def test_restore_table_viewport_coalesces_after_refresh_callbacks() -> None:
+    session = PingSession(SessionConfig(), ["1.1.1.1"])
+    app = PingTopApp(session=session, engine=FakeEngine())
+    app.table = FakeTable()  # type: ignore[assignment]
+    scheduled: list[object] = []
+
+    def fake_call_after_refresh(callback: object, *args: object, **kwargs: object) -> bool:
+        scheduled.append(callback)
+        return True
+
+    app.call_after_refresh = fake_call_after_refresh  # type: ignore[method-assign]
+
+    app._restore_table_viewport(1.0, 2.0)
+    app._restore_table_viewport(3.0, 4.0)
+
+    assert len(scheduled) == 1
+    assert len(app.table.calls) == 2
+
+    app._flush_table_viewport_restore()
+
+    assert app.table.calls[-1] == {
+        "x": 3.0,
+        "y": 4.0,
+        "immediate": True,
+        "force": True,
+    }

@@ -19,11 +19,14 @@ TREND_STYLES = (
 TIMEOUT_STYLE = "bold white on #450a0a"
 
 
-def render_trend(history: Sequence[float | None] | None) -> Text:
+def render_trend(history: Sequence[float | None] | None, *, width: int | None = None) -> Text:
     if not history:
         return Text("-")
     trend = Text()
-    for block, bucket in trend_cells(list(history)):
+    cells = trend_cells(list(history))
+    if width is not None and width > 0:
+        cells = cells[-width:]
+    for block, bucket in cells:
         style = TIMEOUT_STYLE if bucket is None else TREND_STYLES[bucket]
         trend.append(block, style=style)
     return trend

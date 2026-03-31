@@ -60,3 +60,25 @@ def test_cycle_and_toggle_sort() -> None:
     session.toggle_sort_order()
     assert session.sort_reverse is True
 
+
+def test_dotted_host_sort_uses_numeric_segments() -> None:
+    session = build_session("1.1.1.10", "1.1.1.6", "1.1.1.9", "1.1.1.7")
+
+    rows = session.host_snapshots()
+
+    assert [row["target"] for row in rows] == [
+        "1.1.1.6",
+        "1.1.1.7",
+        "1.1.1.9",
+        "1.1.1.10",
+    ]
+
+    session.set_sort(SortKey.HOST, reverse=True)
+    rows = session.host_snapshots()
+
+    assert [row["target"] for row in rows] == [
+        "1.1.1.10",
+        "1.1.1.9",
+        "1.1.1.7",
+        "1.1.1.6",
+    ]

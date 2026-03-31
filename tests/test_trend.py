@@ -26,3 +26,9 @@ def test_render_trend_returns_dash_without_history() -> None:
     trend = render_trend([])
 
     assert trend.plain == "-"
+
+
+def test_render_trend_keeps_latest_samples_when_width_is_limited() -> None:
+    trend = render_trend([10.0, 12.0, 14.0, 16.0], width=2)
+
+    assert len(trend.plain) == 2

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections import deque
 from dataclasses import dataclass
 from typing import cast
@@ -36,8 +37,6 @@ class PingSample(Message):
 
 class PingTopApp(App[None]):
     CSS_PATH = "app.tcss"
-    DETAILS_AUTO_OPEN_WIDTH = 130
-    DETAILS_AUTO_OPEN_HEIGHT = 28
     SORT_HOTKEYS = {
         "H": "target",
         "G": "resolved_ip",
@@ -74,9 +73,12 @@ class PingTopApp(App[None]):
         self._ping_tasks: dict[HostId, asyncio.Task[None]] = {}
         self._pending_updates: deque[PendingUpdate] = deque()
         self._last_sort_refresh = 0.0
+        self._last_fd_log = 0.0
         self._details_visible = False
         self._details_manually_toggled = False
         self._current_column_profile = "wide"
+        self._pending_viewport_restore: tuple[float, float] | None = None
+        self._viewport_restore_scheduled = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -105,9 +107,12 @@ class PingTopApp(App[None]):
     def on_resize(self, event: events.Resize) -> None:
         if not hasattr(self, "table"):
             return
-        if self._apply_responsive_layout():
+        changed = self._apply_responsive_layout()
+        if changed:
             self._sync_all_rows()
             self._refresh_status_strip()
+            return
+        self._sync_all_rows()
 
     def on_key(self, event: events.Key) -> None:
         character = event.character
@@ -208,6 +213,8 @@ class PingTopApp(App[None]):
         self._pending_updates.append(PendingUpdate(message.host_id, message.result))
 
     def flush_updates(self) -> None:
+        now = asyncio.get_running_loop().time()
+        self._log_fd_usage(now)
         if not self._pending_updates:
             return
         touched: set[HostId] = set()
@@ -219,7 +226,6 @@ class PingTopApp(App[None]):
             touched.add(pending.host_id)
         for host_id in touched:
             self._refresh_host(host_id)
-        now = asyncio.get_running_loop().time()
         if touched and (now - self._last_sort_refresh) >= 1.0:
             self._last_sort_refresh = now
             self._sync_all_rows()
@@ -322,19 +328,11 @@ class PingTopApp(App[None]):
 
     def _apply_responsive_layout(self, force: bool = False) -> bool:
         changed = False
-        if force or not self._details_manually_toggled:
-            changed = self._set_details_visible(self._should_auto_show_details()) or changed
         profile = self._column_profile_for_width(self.size.width)
         if force or profile != self._current_column_profile:
             self._current_column_profile = profile
             changed = True
         return changed
-
-    def _should_auto_show_details(self) -> bool:
-        return (
-            self.size.width >= self.DETAILS_AUTO_OPEN_WIDTH
-            and self.size.height >= self.DETAILS_AUTO_OPEN_HEIGHT
-        )
 
     def _column_profile_for_width(self, width: int) -> str:
         if width >= 150:
@@ -351,19 +349,52 @@ class PingTopApp(App[None]):
         return True
 
     def _restore_table_viewport(self, scroll_x: float, scroll_y: float) -> None:
+        self._pending_viewport_restore = (scroll_x, scroll_y)
         self.table.scroll_to(
             x=scroll_x,
             y=scroll_y,
             immediate=True,
             force=True,
         )
-        self.call_after_refresh(
-            self.table.scroll_to,
+        if self._viewport_restore_scheduled:
+            return
+        self._viewport_restore_scheduled = True
+        self.call_after_refresh(self._flush_table_viewport_restore)
+
+    def _flush_table_viewport_restore(self) -> None:
+        self._viewport_restore_scheduled = False
+        viewport = self._pending_viewport_restore
+        self._pending_viewport_restore = None
+        if viewport is None:
+            return
+        scroll_x, scroll_y = viewport
+        self.table.scroll_to(
             x=scroll_x,
             y=scroll_y,
             immediate=True,
             force=True,
         )
+
+    def _log_fd_usage(self, now: float) -> None:
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
+        if (now - self._last_fd_log) < 5.0:
+            return
+        self._last_fd_log = now
+        fd_count = self._open_fd_count()
+        if fd_count is None:
+            logger.debug("fd_count unavailable")
+            return
+        logger.debug("fd_count=%s hosts=%s pending_updates=%s", fd_count, len(self.session.hosts), len(self._pending_updates))
+
+    @staticmethod
+    def _open_fd_count() -> int | None:
+        for path in ("/dev/fd", "/proc/self/fd"):
+            try:
+                return len(os.listdir(path))
+            except OSError:
+                continue
+        return None
 
     async def _run_host_loop(self, host_id: HostId) -> None:
         flag = int(host_id[:2], 16)
