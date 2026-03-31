@@ -4,6 +4,7 @@ from collections import defaultdict
 
 import pytest
 from rich.text import Text
+from textual.widgets import Static
 
 from pingtop.app import PingTopApp
 from pingtop.models import PingResult, SessionConfig, SortKey
@@ -103,6 +104,12 @@ async def test_app_sort_and_help_screen() -> None:
         await pilot.press("h")
         await pilot.pause(0.05)
         assert app.screen_stack
+        help_screen = app.screen_stack[-1]
+        legend = help_screen.query_one("#trend-legend", Static)
+        legend_render = legend.render()
+        assert "Trend Legend" in legend_render.plain
+        assert "low RTT" in legend_render.plain
+        assert "high RTT" in legend_render.plain
         await pilot.press("h")
         await pilot.pause(0.05)
         table = app.query_one(HostTable)
@@ -157,6 +164,9 @@ async def test_details_panel_defaults_open_on_large_window_and_closed_on_small_w
         await pilot.press("i")
         await pilot.pause(0.05)
         assert not details.has_class("hidden-panel")
+        details_render = details.render()
+        assert "Trend Graph" in details_render.plain
+        assert "oldest -> newest" in details_render.plain
         await pilot.press("q")
 
 

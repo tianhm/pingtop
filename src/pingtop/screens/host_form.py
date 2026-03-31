@@ -6,6 +6,8 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Static
 
+from pingtop.widgets.trend import render_trend_legend
+
 
 class HostFormScreen(ModalScreen[str | None]):
     def __init__(self, title: str, value: str = "") -> None:
@@ -95,6 +97,7 @@ class HelpScreen(ModalScreen[None]):
         with Vertical(id="dialog"):
             yield Static("Help", classes="dialog-title")
             yield Static(self.HELP_TEXT)
+            yield Static(render_trend_legend(), id="trend-legend")
             yield Button("Close", variant="primary", id="close")
 
     @on(Button.Pressed, "#close")
