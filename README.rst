@@ -46,11 +46,16 @@ Install
 Requirements:
 
 - Python 3.10+
-- Poetry 2.x
 
 ::
 
-   poetry install
+   python -m pip install pingtop
+
+After installation, run it directly:
+
+::
+
+   pingtop 1.1.1.1 8.8.8.8
 
 Quick Start
 -----------
@@ -59,25 +64,25 @@ Monitor a few public resolvers:
 
 ::
 
-   poetry run pingtop 1.1.1.1 8.8.8.8 9.9.9.9
+   pingtop 1.1.1.1 8.8.8.8 9.9.9.9
 
 Use a faster sampling interval:
 
 ::
 
-   poetry run pingtop 1.1.1.1 8.8.8.8 --interval 0.2 --timeout 0.5
+   pingtop 1.1.1.1 8.8.8.8 --interval 0.2 --timeout 0.5
 
 Expand a CIDR block into usable hosts automatically:
 
 ::
 
-   poetry run pingtop 10.22.76.19/30
+   pingtop 10.22.76.19/30
 
 Load hosts from a file:
 
 ::
 
-   poetry run pingtop --hosts-file hosts.txt
+   pingtop --hosts-file hosts.txt
 
 ``hosts.txt`` is newline-delimited. Blank lines and lines starting with ``#`` are ignored.
 
@@ -88,25 +93,25 @@ Monitor a host list and export the final snapshot:
 
 ::
 
-   poetry run pingtop --hosts-file hosts.txt --export snapshots/session.json
+   pingtop --hosts-file hosts.txt --export snapshots/session.json
 
 Write CSV explicitly:
 
 ::
 
-   poetry run pingtop 1.1.1.1 8.8.8.8 --export snapshots/session.csv
+   pingtop 1.1.1.1 8.8.8.8 --export snapshots/session.csv
 
 Enable debug logging while troubleshooting:
 
 ::
 
-   poetry run pingtop 10.0.0.1 10.0.0.2 --log-file pingtop.log --log-level debug
+   pingtop 10.0.0.1 10.0.0.2 --log-file pingtop.log --log-level debug
 
 Disable the exit summary when you only want the TUI:
 
 ::
 
-   poetry run pingtop 1.1.1.1 --no-summary
+   pingtop 1.1.1.1 --no-summary
 
 CLI Options
 -----------
@@ -195,6 +200,7 @@ Development
 
 ::
 
+   poetry install
    poetry run pytest
    poetry run ruff check .
    poetry run mypy src
