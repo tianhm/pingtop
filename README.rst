@@ -10,6 +10,8 @@ Point it at a few hosts, a whole subnet, or a host list, and get a live Textual 
 
 It is built for the moment when ``ping`` is too small, dashboards are too heavy, and you just want to see what your network is doing right now.
 
+[![asciicast](https://asciinema.org/a/886189.svg)](https://asciinema.org/a/886189)
+
 Why ``pingtop``
 ---------------
 
