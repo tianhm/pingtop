@@ -33,12 +33,14 @@ def render_summary(
     )
 
     status_text, status_color = _status(snapshot)
+    loss_pct = f"{_loss_percent(total_lost, total_sent):.1f}%"
+    loss_styled = style(loss_pct, fg=_loss_color(total_lost, total_sent), bold=True)
     parts = [
         style(status_text, fg=status_color, bold=True),
         f"{total_hosts} hosts",
         f"tx {total_sent}",
         f"rx {total_received}",
-        f"loss {style(f'{_loss_percent(total_lost, total_sent):.1f}%', fg=_loss_color(total_lost, total_sent), bold=True)}",
+        f"loss {loss_styled}",
     ]
     if error_hosts:
         parts.append(f"err {style(str(error_hosts), fg='red', bold=True)}")
@@ -107,7 +109,8 @@ def _status(snapshot: SessionSnapshot) -> tuple[str, str]:
         for host in snapshot.hosts
     )
     has_down = any(
-        int(cast(int, host["seq"])) > 0 and int(cast(int, host["lost"])) == int(cast(int, host["seq"]))
+        int(cast(int, host["seq"])) > 0
+        and int(cast(int, host["lost"])) == int(cast(int, host["seq"]))
         for host in snapshot.hosts
     )
     has_loss = int(cast(int, snapshot.aggregates["total_lost"])) > 0
@@ -135,6 +138,6 @@ def _styler(color: bool):
     def apply(text: str, **styles: object) -> str:
         if not color:
             return text
-        return click.style(text, **styles)
+        return click.style(text, **styles)  # type: ignore[arg-type]  # kwargs match click.style
 
     return apply
