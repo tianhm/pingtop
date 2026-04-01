@@ -385,7 +385,10 @@ class PingTopApp(App[None]):
         if fd_count is None:
             logger.debug("fd_count unavailable")
             return
-        logger.debug("fd_count=%s hosts=%s pending_updates=%s", fd_count, len(self.session.hosts), len(self._pending_updates))
+        logger.debug(
+            "fd_count=%s hosts=%s pending_updates=%s",
+            fd_count, len(self.session.hosts), len(self._pending_updates),
+        )
 
     @staticmethod
     def _open_fd_count() -> int | None:

@@ -1,6 +1,10 @@
 pingtop
 =======
 
+.. image:: https://github.com/laixintao/pingtop/actions/workflows/ci.yml/badge.svg
+   :target: https://github.com/laixintao/pingtop/actions/workflows/ci.yml
+   :alt: CI
+
 ``pingtop`` is a fast, keyboard-first multi-host ping monitor for people who live in the terminal.
 Point it at a few hosts, a whole subnet, or a host list, and get a live Textual dashboard with RTT trends, loss stats, sortable columns, and per-host drill-down details.
 
