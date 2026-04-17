@@ -36,7 +36,7 @@ pingtop = "pingtop.cli:main"
 packages = [{ include = "pingtop", from = "src" }]
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.3.5"
+pytest = "^9.0.3"
 pytest-asyncio = "^1.0.0"
 pytest-cov = "^6.1.1"
 ruff = "^0.11.5"
